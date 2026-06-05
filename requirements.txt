@@ -1,0 +1,4 @@
+# Optional. The suite runs with the standard library + pytest only.
+pytest>=7.0
+# hypothesis is optional; tests/test_fuzz.py falls back to a built-in fuzzer.
+hypothesis>=6.0
