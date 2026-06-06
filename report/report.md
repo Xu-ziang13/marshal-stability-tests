@@ -6,7 +6,7 @@
 - Leader: Wang Chengyi (302023334044)
 - Members: Zhu Guangjun (302023334026), Huang Huanxin (302023334023), Tang Junxi (302023334032), Xu Ziang (302023334070)
 
-**Repository:** `https://github.com/<your-username>/marshal-stability-tests`
+**Repository:** https://github.com/Xu-ziang13/marshal-stability-tests
 **Environment under test:** CPython 3.9.6 (`marshal.version == 4`), macOS/Darwin 24.4.0, x86-64.
 
 ---
