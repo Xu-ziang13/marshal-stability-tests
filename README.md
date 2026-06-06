@@ -1,5 +1,15 @@
 # Stability & Correctness Test Suite for Python's `marshal`
 
+> **Group 15** · Software Testing Final Project
+>
+> | Role | Name | Student ID |
+> |------|------|------------|
+> | Leader | Wang Chengyi | 302023334044 |
+> | Member | Zhu Guangjun | 302023334026 |
+> | Member | Huang Huanxin | 302023334023 |
+> | Member | Tang Junxi | 302023334032 |
+> | Member | Xu Ziang | 302023334070 |
+
 A black-box and white-box test suite investigating whether Python's
 [`marshal`](https://docs.python.org/3/library/marshal.html) module produces
 **hash-identical** output for the same input under all circumstances, and
