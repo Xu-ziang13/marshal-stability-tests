@@ -9,101 +9,245 @@
 > | Member | Huang Huanxin | 302023334023 |
 > | Member | Tang Junxi | 302023334032 |
 > | Member | Xu Ziang | 302023334070 |
+>
+> **Report:** [FINAL_REPORT.md](FINAL_REPORT.md)
+> **Repository:** https://github.com/Xu-ziang13/marshal-stability-tests
 
-A black-box and white-box test suite investigating whether Python's
-[`marshal`](https://docs.python.org/3/library/marshal.html) module produces
-**hash-identical** output for the same input under all circumstances, and
-whether serialization round-trips correctly.
+---
 
-> **Central question.** *Does the same input always create the same (serialized)
-> output?* We require **byte/hash identity**, not mere logical equivalence.
+## What is this?
 
-## TL;DR findings
+Python's [`marshal`](https://docs.python.org/3/library/marshal.html) module
+serializes Python objects to binary byte streams. It is primarily used to
+write `.pyc` bytecode cache files. This project tests whether marshal is
+**stable and correct**:
 
-| # | Property tested | Result |
-|---|-----------------|--------|
-| F1 | `set`/`frozenset` of **strings** | ❌ **Non-deterministic across processes on Python ≤ 3.10** (PYTHONHASHSEED); ✅ Fixed in Python 3.11+ (marshal now sorts set elements) |
-| F2 | `set`/`frozenset` of **ints/None/bools** | ✅ Stable (hash is identity-based) |
-| F3 | `dict` byte-output depends on **insertion order** | ⚠️ Logically-equal dicts ≠ byte-equal |
-| F4 | `-0.0` vs `+0.0` | ✅ Distinct bytes, sign preserved (correct) |
-| F5 | `NaN` / `±Inf` / signalling NaN bit patterns | ✅ Preserved bit-exactly through round-trip |
-| F6 | Recursive/cyclic objects | ⚠️ Raise `ValueError` for versions < 3; OK for v3/v4 (FLAG_REF) |
-| F7 | Same object referenced twice (interning / `FLAG_REF`) | ✅ v3/v4 emit a back-reference; output shorter & still stable |
-| F8 | Cross-`marshal`-version output | ⚠️ Not stable across format versions (by design) — documented & locked by tests |
-| F9 | Within one process, repeated `dumps` of same object | ✅ Always hash-identical |
+> *Does the same input always create the same (serialized) output?*
 
-See [`report/report.md`](report/report.md) for the full discussion and the
-traceability matrix.
+"Same output" means **byte/hash identity** — two outputs must have identical
+SHA-256 digests. Logical equality (`==`) is not sufficient.
 
-## Layout
+We apply six testing techniques: equivalence partitioning, boundary value
+analysis, special-value testing, differential cross-process testing,
+property-based fuzzing (hypothesis), and white-box type-code branch coverage.
+
+---
+
+## Key Findings
+
+| # | Property | Result |
+|---|----------|--------|
+| F1 | `set`/`frozenset` of **strings** cross-process | ❌ Non-deterministic on **Python ≤ 3.10** (PYTHONHASHSEED); ✅ **Fixed in Python 3.11+** |
+| F2 | `set`/`frozenset` of **ints/None/bools** cross-process | ✅ Always stable (integer hash = identity) |
+| F3 | `dict` byte-output vs insertion order | ⚠️ Logically-equal dicts produce different bytes |
+| F4 | Signed zero: `-0.0` vs `+0.0` | ✅ Distinct bytes, sign bit preserved correctly |
+| F5 | NaN / ±Inf / signalling-NaN bit patterns | ✅ Full 64-bit pattern preserved bit-exactly |
+| F6 | Cyclic / self-referential objects | ⚠️ `ValueError` on format v0–v2; handled correctly on v3/v4 |
+| F7 | Shared object referenced twice | ✅ v3/v4 emit a `TYPE_REF` back-reference; output compacted |
+| F8 | Output across marshal format versions | ⚠️ Three distinct encodings across v0–v4 (by design) |
+| F9 | Repeated `dumps` within one process | ✅ Always hash-identical |
+
+**Answer to the central question:** `marshal` is deterministic within a
+single process. Across processes, stability depends on Python version:
+string sets are non-deterministic on Python ≤ 3.10 (F1) but the issue was
+**fixed in Python 3.11**, where marshal sorts set elements before writing.
+
+---
+
+## Test Suite at a Glance
+
+| Metric | Value |
+|--------|-------|
+| Total test cases | **656** |
+| Pass rate | **100%** |
+| Line coverage | **99%** |
+| Python versions tested | **3.8, 3.9, 3.10, 3.11, 3.12, 3.13** |
+| `TYPE_*` branches covered (white-box) | **22 / 22** |
+| Marshal format versions tested | **v0, v1, v2, v3, v4** |
+| Fuzz iterations | **~1000** (400 built-in + 600 hypothesis) |
+
+---
+
+## Repository Layout
 
 ```
 .
 ├── src/
-│   └── marshal_testkit.py     # shared helpers (hashing, value corpora, fuzzers)
+│   └── marshal_testkit.py        # shared helpers: digest(), stable(),
+│                                 # roundtrips(), dumps_in_subprocess(),
+│                                 # value corpora (INT_BOUNDARIES, etc.)
+│
 ├── tests/
-│   ├── test_determinism.py    # same-input/same-output, intra- & inter-process
-│   ├── test_roundtrip.py      # correctness: loads(dumps(x)) == x
-│   ├── test_floats.py         # BVA + special FP values
-│   ├── test_collections.py    # sets/dicts/empty/large, ordering effects
-│   ├── test_recursive.py      # cyclic & deeply-nested structures
-│   ├── test_versions.py       # cross-version format stability
-│   ├── test_typecodes.py      # white-box: one test per marshal.c TYPE_* branch
-│   └── test_fuzz.py           # randomized property-based fuzzing (no deps)
+│   ├── test_determinism.py       # intra- & inter-process stability (F1–F3, F9)
+│   ├── test_roundtrip.py         # correctness: loads(dumps(x)) == x
+│   ├── test_floats.py            # BVA + IEEE-754 special values (F4, F5)
+│   ├── test_collections.py       # empty/large containers, ordering effects
+│   ├── test_recursive.py         # cyclic structures, FLAG_REF depth (F6, F7)
+│   ├── test_versions.py          # cross-version format stability (F8)
+│   ├── test_typecodes.py         # white-box: one test per TYPE_* branch
+│   └── test_fuzz.py              # property-based fuzzing (hypothesis + built-in)
+│
 ├── tools/
-│   └── run_multiversion.py    # run pytest across Python 3.8–3.13 via conda
-│   ├── f1_set_hashseed.py     # reproduces the string-set non-determinism
-│   └── run_all_findings.py    # prints an evidence report
-├── requirements.txt
-├── pytest.ini
-└── report/report.md
+│   └── run_multiversion.py       # run pytest across Python 3.8–3.13 via conda
+│
+├── findings/
+│   ├── f1_set_hashseed.py        # standalone script: reproduce F1 evidence
+│   └── run_all_findings.py       # print evidence for all 9 findings (F1–F9)
+│
+├── results/
+│   └── multiversion-macos/       # pre-collected results: macOS arm64, 6 versions
+│       ├── summary.json          # cross-version pass/fail overview
+│       ├── py38/                 # Python 3.8.20
+│       │   ├── pytest_output.txt # full pytest -v output
+│       │   └── summary.json      # version, status, passed/failed counts
+│       ├── py39/                 # Python 3.9.25
+│       ├── py310/                # Python 3.10.20
+│       ├── py311/                # Python 3.11.15
+│       ├── py312/                # Python 3.12.13
+│       └── py313/                # Python 3.13.13
+│
+├── FINAL_REPORT.md               # full report with traceability matrix
+├── conftest.py                   # adds src/ to sys.path for pytest
+├── pytest.ini                    # pytest configuration
+└── requirements.txt              # pytest + hypothesis (hypothesis optional)
 ```
 
-## Running
+---
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.8 or later
+- `pip install pytest` (required)
+- `pip install hypothesis` (optional; `test_fuzz.py` falls back to a
+  built-in deterministic fuzzer if not installed)
+
+### Run the full test suite
 
 ```bash
-python3 -m pytest -q                 # full suite
-python3 -m pytest -q tests/test_determinism.py
-python3 findings/run_all_findings.py # human-readable evidence dump
+git clone https://github.com/Xu-ziang13/marshal-stability-tests.git
+cd marshal-stability-tests
+pip install -r requirements.txt
+python3 -m pytest -q
 ```
 
-### Multi-version testing (Python 3.8–3.13)
+Expected output:
 
-Requires [conda](https://docs.conda.io/) with environments named after the
-version numbers (`3.8`, `3.9`, …, `3.13`). Create them with:
+```
+656 passed in ~5s
+```
+
+### Run a specific module
 
 ```bash
+python3 -m pytest tests/test_determinism.py -v   # stability tests
+python3 -m pytest tests/test_floats.py -v        # float BVA + special values
+python3 -m pytest tests/test_typecodes.py -v     # white-box branch coverage
+```
+
+### Print human-readable evidence for all findings
+
+```bash
+python3 findings/run_all_findings.py
+```
+
+This prints concrete bytes and SHA-256 digests backing each of the 9
+findings, including the F1 string-set non-determinism demonstration.
+
+### Reproduce F1 specifically
+
+```bash
+python3 findings/f1_set_hashseed.py
+```
+
+Spawns 6 subprocesses with different `PYTHONHASHSEED` values and shows
+that string-set digests diverge (Python ≤ 3.10) or converge (Python 3.11+).
+
+---
+
+## Multi-Version Testing (Python 3.8–3.13)
+
+The `tools/run_multiversion.py` script runs the full pytest suite under
+each Python version via conda, then prints a summary table.
+
+### Setup conda environments
+
+```bash
+# Create one environment per version (only needed once)
 for v in 3.8 3.9 3.10 3.11 3.12 3.13; do
     conda create -n $v python=$v -y
 done
 ```
 
-Then run:
+### Run
 
 ```bash
-python3 tools/run_multiversion.py                   # all versions
+# All versions (auto-installs pytest + hypothesis in each env)
+python3 tools/run_multiversion.py
+
+# Selected versions only
 python3 tools/run_multiversion.py --versions 3.10 3.11 3.12
-python3 tools/run_multiversion.py --no-install      # skip dep install
+
+# Custom output directory
+python3 tools/run_multiversion.py --output-dir results/multiversion-linux
+
+# Skip automatic dependency install (if already installed)
+python3 tools/run_multiversion.py --no-install
 ```
 
-Results are written to `results/multiversion-<os>/` with per-version
-`pytest_output.txt` and `summary.json`. The summary table printed at the
-end shows pass/fail for each version at a glance.
+### Example output
 
-Only **pytest** is required. `hypothesis` is optional; `test_fuzz.py` uses it
-when present and otherwise falls back to a built-in deterministic random fuzzer.
+```
+Platform : macOS-14.1.2-arm64-arm-64bit
+Versions : 3.8, 3.9, 3.10, 3.11, 3.12, 3.13
 
-## Environment used
+[INFO] Python 3.8  (3.8.20 ...)
+    [pytest] ✅ PASSED — passed=656  failed=0
+[INFO] Python 3.9  (3.9.25 ...)
+    [pytest] ✅ PASSED — passed=656  failed=0
+...
 
-- macOS (Darwin 23.1.0), arm64, CPython 3.9.6, `marshal.version == 4`
-- Multi-version suite verified on CPython 3.8, 3.9, 3.10, 3.11, 3.12, 3.13
-  (all 656 tests pass on every version)
-- The cross-version *format* tests are written to also run on other CPython
-  versions; the suite records the running interpreter in its output.
+======================================================
+MULTI-VERSION SUMMARY
+======================================================
+Version   Status      Passed    Failed
+------------------------------------------------------
+3.8       ✅ passed    656       0
+3.9       ✅ passed    656       0
+3.10      ✅ passed    656       0
+3.11      ✅ passed    656       0
+3.12      ✅ passed    656       0
+3.13      ✅ passed    656       0
+======================================================
+```
 
-## PEP 8
+Pre-collected results for macOS arm64 are in
+[`results/multiversion-macos/`](results/multiversion-macos/).
+
+---
+
+## Test Techniques Used
+
+| Technique | Where applied | Purpose |
+|-----------|--------------|---------|
+| Equivalence Partitioning | `test_roundtrip.py`, `test_collections.py` | Cover all 8 Python type classes |
+| Boundary Value Analysis | `test_floats.py`, `test_collections.py` | Int word boundaries (2³¹, 2⁶³…), collection sizes (0, 255, 256…) |
+| Special-value testing | `test_floats.py` | NaN, ±Inf, -0.0, signalling NaN |
+| Differential testing | `test_determinism.py` | Spawn fresh subprocesses with different PYTHONHASHSEED |
+| Property-based fuzzing | `test_fuzz.py` | Randomly-generated nested objects; round-trip + idempotency invariants |
+| White-box branch coverage | `test_typecodes.py` | One input per `TYPE_*` branch in `Python/marshal.c` |
+
+---
+
+## Environment
+
+- **Primary:** macOS Darwin 23.1.0, arm64, CPython 3.9.6, `marshal.version == 4`
+- **Multi-version:** CPython 3.8 – 3.13 (conda), all 656 tests pass on every version
+- **No external runtime dependencies** beyond `pytest` and optionally `hypothesis`
+
+## PEP 8 Compliance
 
 ```bash
-python3 -m flake8 src tests findings      # if flake8 installed
-python3 -m pycodestyle src tests findings  # alternative
+python3 -m pycodestyle src tests findings   # 0 violations
 ```
