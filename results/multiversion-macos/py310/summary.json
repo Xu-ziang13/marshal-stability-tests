@@ -1,0 +1,10 @@
+{
+  "version": "3.10",
+  "full_version": "3.10.20 (main, Mar 11 2026, 17:43:48) [Clang 20.1.8 ]",
+  "executable": "<conda-envs>/3.10/bin/python",
+  "platform": "macOS-14.1.2-arm64-arm-64bit",
+  "status": "passed",
+  "returncode": 0,
+  "passed": 656,
+  "failed": 0
+}

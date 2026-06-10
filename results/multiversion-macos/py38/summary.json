@@ -1,0 +1,10 @@
+{
+  "version": "3.8",
+  "full_version": "3.8.20 (default, Oct  3 2024, 10:22:23) ",
+  "executable": "<conda-envs>/3.8/bin/python",
+  "platform": "macOS-14.1.2-arm64-arm-64bit",
+  "status": "passed",
+  "returncode": 0,
+  "passed": 656,
+  "failed": 0
+}

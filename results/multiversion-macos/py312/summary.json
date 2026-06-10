@@ -1,0 +1,10 @@
+{
+  "version": "3.12",
+  "full_version": "3.12.13 | packaged by Anaconda, Inc. | (main, Mar 19 2026, 20:12:32) [Clang 20.1.8 ]",
+  "executable": "<conda-envs>/3.12/bin/python",
+  "platform": "macOS-14.1.2-arm64-arm-64bit",
+  "status": "passed",
+  "returncode": 0,
+  "passed": 656,
+  "failed": 0
+}

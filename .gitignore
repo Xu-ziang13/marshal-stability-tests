@@ -13,8 +13,9 @@ venv/
 .coverage
 htmlcov/
 
-# Multi-version test results (large generated output)
-results/
+# Multi-version test results: keep multiversion evidence, ignore large fuzz runs
+results/multiversion-windows/
+results/multiversion-linux/
 
 # Defense preparation documents (internal)
 defense/

@@ -1,0 +1,10 @@
+{
+  "version": "3.9",
+  "full_version": "3.9.25 (main, Nov  3 2025, 22:29:32) ",
+  "executable": "<conda-envs>/3.9/bin/python",
+  "platform": "macOS-14.1.2-arm64-arm-64bit",
+  "status": "passed",
+  "returncode": 0,
+  "passed": 656,
+  "failed": 0
+}
