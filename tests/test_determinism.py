@@ -8,13 +8,22 @@ the question into two regimes:
 * **Inter-process** -- ``dumps`` run in fresh interpreters with differing
   ``PYTHONHASHSEED``. This is where hash-randomised containers (sets of
   strings) reveal non-determinism (F1/F2).
+
+Multi-version note (discovered via conda cross-version testing):
+  Python 3.8-3.10: string sets are NON-deterministic across hash seeds (F1).
+  Python 3.11+:    marshal sorts set elements before writing, making output
+                   deterministic even for string sets. F1 is fixed in 3.11+.
 """
 
 import marshal
+import sys
 
 import pytest
 
 import marshal_testkit as kit
+
+# True when the running interpreter has the 3.11+ sorted-set fix.
+_SET_MARSHAL_IS_SORTED = sys.version_info >= (3, 11)
 
 
 # --- Intra-process stability (positive cases) ------------------------------
@@ -53,22 +62,31 @@ def test_int_set_stable_across_hashseeds(seed):
 # --- Inter-process: string sets are NON-deterministic (F1) -----------------
 
 def test_string_set_nondeterministic_across_hashseeds():
-    """A set of *strings* serialises differently under different hash seeds.
+    """String set stability depends on Python version (F1 / multi-version finding).
 
-    This documents F1: marshal output for hash-randomised containers is NOT
-    stable across processes. The test asserts the bug exists; if a future
-    CPython fixed it (e.g. by sorting), this test would flag the change.
+    Python 3.8-3.10: output differs across hash seeds (non-deterministic).
+    Python 3.11+:    marshal sorts set elements before writing; output is
+                     stable regardless of seed. This test documents both
+                     behaviours and passes on all supported versions.
     """
     expr = "{'apple', 'banana', 'cherry', 'date', 'egg', 'fig', 'grape'}"
     digests = {
         kit.dumps_in_subprocess(expr, env={"PYTHONHASHSEED": s})
         for s in ("0", "1", "2", "3", "4", "5", "6", "7")
     }
-    # If output were stable we would see exactly one digest.
-    assert len(digests) > 1, (
-        "expected hash-seed-dependent output for a string set; "
-        "got a single digest -- behaviour may have changed"
-    )
+    if _SET_MARSHAL_IS_SORTED:
+        # 3.11+: sorting fix applied, output must be stable.
+        assert len(digests) == 1, (
+            "expected stable output for string set on Python 3.11+ "
+            "(sorted-set fix); got multiple digests"
+        )
+    else:
+        # 3.8-3.10: hash-seed randomisation leaks into marshal output.
+        assert len(digests) > 1, (
+            "expected hash-seed-dependent output for a string set on "
+            f"Python {sys.version_info.major}.{sys.version_info.minor}; "
+            "got a single digest -- behaviour may have changed"
+        )
 
 
 def test_string_set_stable_when_hashseed_fixed():

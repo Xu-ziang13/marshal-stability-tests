@@ -8,3 +8,14 @@ __pycache__/
 .venv/
 venv/
 .DS_Store
+
+# Coverage reports
+.coverage
+htmlcov/
+
+# Multi-version test results (large generated output)
+results/
+
+# Defense preparation documents (internal)
+defense/
+
